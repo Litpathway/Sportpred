@@ -1,0 +1,7 @@
+# Example production reverse proxy. Set your actual domain and route only the
+# frontend publicly; its /api rewrite reaches the private FastAPI service.
+{$SPORTPREDICT_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy web:3000
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+}
