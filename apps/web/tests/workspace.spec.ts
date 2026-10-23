@@ -78,3 +78,18 @@ test("API failures show a recoverable error state",async({page})=>{
   await page.route("**/api/fixtures?**",route=>route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({detail:"Fixture service unavailable"})}));
   await page.goto("/matches");await expect(page.getByRole("main").getByRole("alert")).toContainText("Fixture service unavailable");await expect(page.getByRole("button",{name:"Try again"})).toBeVisible();
 });
+
+test("mobile navigation exposes active routes and closes with Escape",async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto("/predictions/high-confidence");
+  const menu=page.getByRole("button",{name:"Open navigation"});
+  await menu.click();
+  await expect(menu).toHaveAttribute("aria-expanded","true");
+  await expect(page.getByRole("link",{name:/High confidence/})).toHaveAttribute("aria-current","page");
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveAttribute("aria-expanded","false");
+  await menu.click();
+  await page.getByRole("link",{name:"Performance"}).click();
+  await expect(page).toHaveURL(/\/performance$/);
+  await expect(menu).toHaveAttribute("aria-expanded","false");
+});
