@@ -9,7 +9,7 @@ from sqlalchemy import select, text
 
 from app.core.config import get_settings
 from app.core.security import password_hasher
-from app.db.session import SessionLocal, engine
+from app.db.session import SessionLocal, engine, make_engine
 from app.models.entities import User
 
 SCHEMA_LOCK = 734200819
@@ -24,7 +24,8 @@ def bootstrap():
     config.set_main_option("script_location", str(root / "alembic"))
     # The session-level PostgreSQL lock also serializes first-admin creation.
     # Every API cold start and daemon rollout uses the same migration lock.
-    with engine.connect() as connection:
+    migration_engine = make_engine(settings.database_url_unpooled) if settings.database_url_unpooled else engine
+    with migration_engine.connect() as connection:
         postgres = connection.dialect.name == "postgresql"
         if postgres:
             connection.execute(text("SELECT pg_advisory_lock(:key)"), {"key": SCHEMA_LOCK})
@@ -60,8 +61,8 @@ def main():
     parser.add_argument("role", choices=["api", "worker", "scheduler"])
     role = parser.parse_args().role
     settings = get_settings()
-    if settings.environment != "production" or settings.demo_mode or settings.fixture_provider != "authorized":
-        raise ValueError("Cloud deployment requires ENVIRONMENT=production, DEMO_MODE=false and FIXTURE_PROVIDER=authorized")
+    if settings.environment != "production" or settings.demo_mode or settings.fixture_provider not in {"authorized", "api_football"}:
+        raise ValueError("Cloud deployment requires production, real data and an authorized or api_football provider")
     if any(not origin.startswith("https://") for origin in settings.origins) or not settings.origins:
         raise ValueError("ALLOWED_ORIGINS must contain the exact HTTPS site origin")
     bootstrap()

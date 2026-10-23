@@ -49,6 +49,15 @@ test("ten-league coverage shows missing live data without fabricating fixtures",
   await expect(page.locator("html")).toHaveJSProperty("scrollWidth",await page.evaluate(()=>document.documentElement.clientWidth));
 });
 
+test("imported form is shown without inventing model probabilities",async({page})=>{
+  await page.route("**/api/fixtures/1",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({fixture,predictions:[],evidence:prediction.features,data_status:"insufficient_data"})}));
+  await page.goto("/matches/1");
+  await expect(page.getByRole("heading",{name:"Current team form"})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Insufficient prediction data"})).toBeVisible();
+  await expect(page.locator(".market-row")).toHaveCount(0);
+  await expect(page.getByText("84.0%",{exact:true})).toHaveCount(0);
+});
+
 test("verified-code feed refuses to fabricate a code",async({page})=>{
   await page.goto("/booking-codes");await expect(page.getByRole("heading",{name:"No verified codes published"})).toBeVisible();
   await page.getByRole("button",{name:"All publications"}).click();await expect(page.getByRole("heading",{name:"No publications yet"})).toBeVisible();

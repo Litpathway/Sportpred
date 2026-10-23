@@ -115,6 +115,9 @@ class DemoFixtureProvider:
 
 
 def fixture_provider(settings: Settings) -> FixtureProvider:
+    if settings.fixture_provider == "api_football":
+        from app.providers.api_football import ApiFootballProvider
+        return ApiFootballProvider(settings)
     if settings.fixture_provider == "sports_skills":
         from app.providers.sports_skills import SportsSkillsFixtureProvider
         return SportsSkillsFixtureProvider(settings)

@@ -20,3 +20,5 @@ coverage/
 *.egg-info/
 .coverage
 replays/
+/.agents/
+/skills-lock.json

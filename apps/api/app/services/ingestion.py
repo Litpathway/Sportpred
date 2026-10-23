@@ -29,7 +29,7 @@ def sync_fixtures(db: Session, provider: FixtureProvider) -> dict:
     comps = {c.identity: c for c in db.scalars(select(Competition))}
     fixtures = {(f.provider, f.external_id): f for f in db.scalars(select(Fixture))}
     natural = {(f.competition_id, f.home_id, f.away_id, f.kickoff): f for f in fixtures.values()}
-    created = updated = 0
+    created = updated = stale_ignored = 0
     for row in incoming:
         country = normalize(row.country)
         comp_key = f"{row.id_namespace}:competition:{row.competition_external_id}" if row.id_namespace and row.competition_external_id else f"{country}:{normalize(row.competition)}"
@@ -53,6 +53,12 @@ def sync_fixtures(db: Session, provider: FixtureProvider) -> dict:
         kickoff = naive_utc(row.kickoff)
         natural_key = (comps[comp_key].id, home.id, away.id, kickoff)
         fixture = fixtures.get((provider.name, row.external_id)) or natural.get(natural_key)
+        source_time = naive_utc(datetime.fromisoformat(row.enrichment["as_of"])) if provider.name == "api_football" and row.enrichment.get("as_of") else None
+        if fixture and source_time and (fixture.enrichment or {}).get("as_of"):
+            previous_time = naive_utc(datetime.fromisoformat(fixture.enrichment["as_of"]))
+            if source_time < previous_time:
+                stale_ignored += 1
+                continue
         if not fixture:
             fixture = Fixture(provider=provider.name, external_id=row.external_id, competition_id=comps[comp_key].id,
                               home_id=home.id, away_id=away.id, kickoff=kickoff)
@@ -71,9 +77,9 @@ def sync_fixtures(db: Session, provider: FixtureProvider) -> dict:
         fixture.result_known_at = previous_result[3] if same_final and previous_result[3] else naive_utc(row.result_known_at)
         fixture.simulated = row.simulated
         fixture.odds, fixture.odds_at = row.odds, naive_utc(row.odds_at)
-        fixture.enrichment, fixture.synced_at = row.enrichment, utcnow()
+        fixture.enrichment, fixture.synced_at = row.enrichment, source_time or utcnow()
         natural[natural_key] = fixture
     db.add(AuditLog(action="fixtures.synced", entity=provider.name, detail={"created": created, "updated": updated,
-        "warnings": getattr(provider, "warnings", [])}))
+        "warnings": getattr(provider, "warnings", []), "stale_ignored": stale_ignored}))
     db.commit()
     return {"created": created, "updated": updated}

@@ -2,6 +2,8 @@
 
 These are **application-owned normalized gateway contracts**, not claims that a bookmaker or sports provider exposes these paths. Implement a gateway against the provider you are licensed and authorized to use, then configure the environment variables locally.
 
+API-Football has a separate [native adapter](API_FOOTBALL.md). Select `FIXTURE_PROVIDER=api_football` and configure `API_FOOTBALL_KEY`; the gateway described below is unnecessary for that provider.
+
 ## Fixtures
 
 `FIXTURE_PROVIDER=authorized` sends a bearer-authenticated HTTPS GET to the exact `FIXTURE_API_URL`. The body is `{"fixtures": [...]}`. The Pydantic `FixtureDTO` is the authoritative schema. Each fixture supplies:

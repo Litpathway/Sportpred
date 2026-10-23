@@ -117,8 +117,12 @@ def fixture_detail(fixture_id: int, db: DB):
     fixture = db.get(Fixture, fixture_id)
     if not fixture or fixture.simulated != get_settings().demo_mode:
         raise HTTPException(404, "Match not found")
+    from app.ml.features import features_for
+    history = list(db.scalars(select(Fixture).where(Fixture.status == "finished")))
+    evidence = features_for(fixture, history, cutoff=utcnow()) if fixture.status == "scheduled" else None
     return {"fixture": fixture_json(fixture), "predictions": [prediction_json(p) for p in db.scalars(
         select(Prediction).where(Prediction.fixture_id == fixture_id, Prediction.id.in_(latest_prediction_ids())).order_by(Prediction.probability.desc()))],
+        "evidence": evidence.detail if evidence else None,
         "data_status": "available" if db.scalar(select(Prediction.id).where(Prediction.fixture_id == fixture_id).limit(1)) else "insufficient_data"}
 
 
@@ -253,11 +257,27 @@ def providers(db: DB, user: User = Depends(reader)):
     last_sync = db.scalar(select(AuditLog).where(AuditLog.action == "fixtures.synced").order_by(AuditLog.id.desc()))
     settings = get_settings()
     recent_failures = list(db.scalars(select(JobRun).where(JobRun.status == "dead_letter").order_by(JobRun.id.desc()).limit(5)))
+    api_football = {"configured": settings.fixture_provider == "api_football", "key_present": bool(settings.api_football_key),
+        "daily_budget": settings.api_football_daily_budget, "pipeline_interval_minutes": settings.pipeline_interval_minutes,
+        "account": None, "last_warnings": last_sync.detail.get("warnings", []) if last_sync else []}
+    if settings.fixture_provider == "api_football" and settings.api_football_key:
+        from app.providers.api_football import RedisApiCache
+        from app.providers.fixtures import ProviderFailure
+        try:
+            cache = RedisApiCache(settings.redis_url, settings.api_football_key.get_secret_value())
+            api_football["account"] = cache.get("status_summary")
+            latest = cache.get("sync_status")
+            if latest:
+                api_football["last_warnings"] = latest.get("warnings", [])
+            api_football["last_error"] = cache.get("last_error")
+        except ProviderFailure:
+            api_football["cache_status"] = "unavailable"
     return {"fixtures": {"name": settings.fixture_provider, "enabled": platform_settings(db).provider_enabled,
             "last_sync": stamp(last_sync.created_at) if last_sync else None,
             "status": "never_synced" if not last_sync else "fresh" if last_sync.created_at > utcnow() - timedelta(hours=6) else "stale"},
             "booking": {"name": settings.booking_provider, "genuine_enabled": settings.booking_provider == "authorized" and bool(settings.booking_api_url and settings.booking_api_token) and not settings.demo_mode},
             "recent_failure_count": len(recent_failures),
+            "api_football": api_football,
             "sports_skills": {"configured": settings.fixture_provider == "sports_skills", "personal_use_opt_in": settings.sports_skills_personal_use,
                 "production_allowed": False, "competitions": settings.sports_skills_competitions.split(","),
                 "source_commit": "bdb972c0625fa337e15f18ca58abd28f57f25e37", "history_enabled": settings.sports_skills_history}}

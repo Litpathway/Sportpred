@@ -12,18 +12,20 @@ import { CalibrationChart, PerformanceChart } from "@/components/charts";
 import { AdminView, LoginView } from "@/components/admin";
 import { cn } from "@/lib/utils";
 import { LeagueCoveragePanel } from "@/components/league-coverage";
+import { ApiFootballStatus } from "@/components/api-football-status";
+import { CurrentForm } from "@/components/current-form";
 
 export function AppView({path}: {path: string}) {
   if (path === "/") return <Dashboard/>;
   if (path === "/matches") return <MatchExplorer/>;
-  if (/^\/matches\/\d+$/.test(path)) return <MatchAnalysis id={Number(path.split("/")[2])}/>;
+  if (/^\/matches\/\d+$/.test(path)) return <><MatchAnalysis id={Number(path.split("/")[2])}/><CurrentForm id={Number(path.split("/")[2])}/></>;
   if (path === "/predictions" || path === "/predictions/high-confidence") return <PredictionsView high={path.endsWith("high-confidence")}/>;
   if (path === "/booking-codes") return <BookingFeed/>;
   if (/^\/booking-codes\/\d+$/.test(path)) return <BookingDetail id={Number(path.split("/")[2])}/>;
   if (path === "/performance") return <PerformanceView/>;
   if (path === "/about") return <About/>;
   if (path === "/login") return <LoginView/>;
-  if (path === "/admin" || /^\/admin\/(fixtures|predictions|codes|models|providers|settings)$/.test(path)) return <AdminView path={path}/>;
+  if (path === "/admin" || /^\/admin\/(fixtures|predictions|codes|models|providers|settings)$/.test(path)) return <><AdminView path={path}/>{path === "/admin/providers" && <ApiFootballStatus/>}</>;
   return <Empty title="Page not found" description="Use the navigation to return to your workspace."/>;
 }
 
