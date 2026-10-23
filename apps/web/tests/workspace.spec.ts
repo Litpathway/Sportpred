@@ -93,3 +93,20 @@ test("mobile navigation exposes active routes and closes with Escape",async({pag
   await expect(page).toHaveURL(/\/performance$/);
   await expect(menu).toHaveAttribute("aria-expanded","false");
 });
+
+test("admin workspace explains navigation, actions and model training",async({page})=>{
+  await page.route("**/api/auth/me",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({email:"admin@example.test",role:"admin",csrf_token:"test-csrf"})}));
+  await page.route("**/api/admin/overview",route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({...overview,failed_jobs:0})}));
+  await page.route("**/api/admin/jobs",route=>route.fulfill({status:200,contentType:"application/json",body:"[]"}));
+  await page.route("**/api/admin/audit",route=>route.fulfill({status:200,contentType:"application/json",body:"[]"}));
+  await page.route("**/api/admin/models",route=>route.fulfill({status:200,contentType:"application/json",body:"[]"}));
+  await page.goto("/admin");
+  await expect(page.getByRole("heading",{name:"Admin overview"})).toBeVisible();
+  await expect(page.getByRole("navigation",{name:"Admin sections"}).getByRole("link",{name:"Models & data"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Run publication pipeline"})).toBeVisible();
+  await expect(page.getByText(/does not train or approve a model/i)).toBeVisible();
+  await page.getByRole("navigation",{name:"Admin sections"}).getByRole("link",{name:"Models & data",exact:true}).click();
+  await expect(page.getByRole("heading",{name:"Models and training data"})).toBeVisible();
+  await expect(page.getByText("Choose a results CSV")).toBeVisible();
+  await expect(page.getByText(/Training creates a version for review/i).first()).toBeVisible();
+});
