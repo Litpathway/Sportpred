@@ -96,6 +96,30 @@ def test_native_feed_authentication_mapping_cache_and_no_external_prediction_cal
         assert {r.url.path for r in calls} == {"/status", "/leagues", "/fixtures", "/odds"}
 
 
+def test_plan_restricted_history_for_one_league_does_not_block_the_next_league():
+    history_leagues = []
+
+    def handler(request):
+        if request.url.path == "/status":
+            return wrapped({"subscription": {"plan": "Free", "active": True}, "requests": {"current": 1, "limit_day": 100}})
+        if request.url.path == "/leagues":
+            return wrapped(metadata())
+        if request.url.path == "/fixtures" and "league" in request.url.params:
+            league = int(request.url.params["league"])
+            history_leagues.append(league)
+            if league == LEAGUE_IDS["premier-league"]:
+                return wrapped([], errors={"plan": "competition unavailable"})
+            return wrapped([])
+        return wrapped([])
+
+    with client(handler) as http:
+        provider = ApiFootballProvider(settings(), client=http, cache=MemoryCache())
+        provider.fetch()
+
+    assert history_leagues == [LEAGUE_IDS["premier-league"], LEAGUE_IDS["la-liga"]]
+    assert any(warning["reason"] == "history_unavailable" for warning in provider.warnings)
+
+
 @pytest.mark.parametrize("status", ["FT", "AET", "PEN"])
 def test_final_scores_use_regulation_time_and_observed_availability(status):
     with client(lambda r: wrapped([])) as http:

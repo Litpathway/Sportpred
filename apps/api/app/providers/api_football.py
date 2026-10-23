@@ -273,8 +273,15 @@ class ApiFootballProvider:
             try:
                 items, observed = self._read("/fixtures", {"league": native, "season": season, "timezone": "UTC"}, 86400)
                 consume(items, observed)
+            except RequestBudgetExceeded as exc:
+                self.warnings.append({"reason": "history_unavailable", "league_slug": self.ids[native], "detail": str(exc)})
+                break
             except ProviderFailure as exc:
                 self.warnings.append({"reason": "history_unavailable", "league_slug": self.ids[native], "detail": str(exc)})
+                # A single league may be outside the provider's plan. Continue
+                # to another league so that one restriction cannot starve all
+                # of the other current-season history imports.
+                continue
             if self.calls > before:
                 break
         now = datetime.now(UTC)
