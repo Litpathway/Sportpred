@@ -1,5 +1,4 @@
 import hashlib
-from datetime import UTC
 import json
 from datetime import timedelta
 from pathlib import Path
@@ -17,6 +16,29 @@ from app.services.ingestion import platform_settings
 
 def latest_prediction_ids():
     return select(func.max(Prediction.id)).group_by(Prediction.fixture_id, Prediction.market)
+
+
+def prediction_generation(model_id: int, fixture: Fixture, market: str, features, odds: float | None) -> str:
+    # Ignore the prediction timestamp and small rest-day drift. A new snapshot
+    # is created only when match history, meaningful model inputs, or the quote
+    # actually changes; repeating the job with the same evidence stays idempotent.
+    values = {key: round(value, 4) for key, value in features.detail["values"].items()
+              if key not in {"home_rest", "away_rest"}}
+    identity = {
+        "model": model_id,
+        "fixture": fixture.id,
+        "market": market,
+        "history": features.detail["history_ids"],
+        "values": values,
+        "quality": round(features.quality, 4),
+        "missing": sorted(features.detail["missing"]),
+        "home_form": features.detail["home_form"],
+        "away_form": features.detail["away_form"],
+        "odds": odds,
+        "odds_at": fixture.odds_at.isoformat() if fixture.odds_at else None,
+    }
+    encoded = json.dumps(identity, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    return hashlib.sha256(encoded).hexdigest()[:40]
 
 
 def train_and_register(db: Session) -> ModelVersion:
@@ -101,8 +123,9 @@ def generate_predictions(db: Session) -> dict:
         artifact = load_artifact(Path(model.artifact_path), model.metrics["sha256"])
     history = list(db.scalars(select(Fixture).where(Fixture.status == "finished")))
     upcoming = list(db.scalars(select(Fixture).where(Fixture.status == "scheduled", Fixture.kickoff > utcnow(), Fixture.simulated == model.simulated)))
-    generation = str(int(utcnow().replace(tzinfo=UTC).timestamp()) // 900)
-    existing = {(p.fixture_id, p.market) for p in db.scalars(select(Prediction).where(Prediction.model_id == model.id, Prediction.generation == generation))}
+    existing = {(p.fixture_id, p.generation) for p in db.scalars(
+        select(Prediction).where(Prediction.model_id == model.id, Prediction.fixture_id.in_([f.id for f in upcoming]))
+    )} if upcoming else set()
     created, insufficient = 0, []
     for fixture in upcoming:
         # Use current time rather than kickoff: future lineup/result information is excluded.
@@ -112,10 +135,12 @@ def generate_predictions(db: Session) -> dict:
             db.add(AuditLog(action="prediction.insufficient_data", entity=str(fixture.id), detail={"reason": "Insufficient prior history or model cutoff"}))
             continue
         for market, (calibrated, raw) in predict(artifact, features.values).items():
-            if (fixture.id, market) in existing:
+            odds = fixture.odds.get(market)
+            generation = prediction_generation(model.id, fixture, market, features, odds)
+            if (fixture.id, generation) in existing:
                 continue
             p = Prediction(fixture=fixture, model=model, market=market, generation=generation, probability=calibrated, raw_probability=raw,
-                quality=features.quality, odds=fixture.odds.get(market), odds_at=fixture.odds_at,
+                quality=features.quality, odds=odds, odds_at=fixture.odds_at,
                 features=features.detail, created_at=utcnow(), outcome="pending",
                 explanation=f"{MARKET_LABELS[market]} from a calibrated Poisson/XGBoost ensemble. "
                 f"Home averages {features.values[0]:.2f} goals scored; away averages {features.values[4]:.2f}. "
@@ -124,6 +149,7 @@ def generate_predictions(db: Session) -> dict:
                 "The baseline uses historical form; feed enrichment remains contextual.")
             db.add(p)
             db.flush()
+            existing.add((fixture.id, generation))
             p.reasons = eligibility(p, db)
             p.eligible = not p.reasons
             db.add(AuditLog(action="prediction.generated", entity=str(p.id), detail={"model": model.version, "reasons": p.reasons, "feature_as_of": features.detail["as_of"]}))

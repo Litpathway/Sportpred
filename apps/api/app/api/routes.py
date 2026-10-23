@@ -1,8 +1,9 @@
 from datetime import timedelta
 from typing import Annotated
 
+import redis
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -10,7 +11,7 @@ from app.core.leagues import EUROPEAN_LEAGUES
 from app.core.security import DUMMY_HASH, administrator, issue_token, login_identity, operator, password_hasher, reader
 from app.db.session import get_db
 from app.models.entities import AuditLog, Competition, Fixture, JobRun, LoginAttempt, ModelVersion, Prediction, Slip, Team, User, utcnow
-from app.schemas.contracts import ApprovalInput, LoginInput, MARKET_LABELS, SettingsInput, SlipInput
+from app.schemas.contracts import ApprovalInput, ClearDataInput, LoginInput, MARKET_LABELS, SettingsInput, SlipInput
 from app.services.analytics import performance
 from app.services.ingestion import platform_settings
 from app.services.predictions import latest_prediction_ids, refilter
@@ -140,7 +141,7 @@ def fixture_detail(fixture_id: int, db: DB):
 
 
 @router.get("/predictions")
-def predictions(db: DB, high_confidence: bool = False, latest_only: bool = False, q: str = Query(default="", max_length=100), market: str = "",
+def predictions(db: DB, high_confidence: bool = False, latest_only: bool = True, q: str = Query(default="", max_length=100), market: str = "",
                 outcome: str = "", competition: str = "", limit: int = Query(default=40, ge=1, le=100), offset: int = Query(default=0, ge=0)):
     query = select(Prediction).join(Fixture).where(Fixture.simulated == get_settings().demo_mode).order_by(Prediction.probability.desc(), Prediction.id)
     if latest_only:
@@ -226,6 +227,40 @@ def admin_overview(db: DB, user: User = Depends(reader)):
     return {**overview(db), "user": {"email": user.email, "role": user.role},
             "failed_jobs": db.scalar(select(func.count()).select_from(JobRun).where(JobRun.status == "dead_letter")),
             "settings": settings_read(db, user)}
+
+
+@router.delete("/admin/data")
+def clear_platform_data(payload: ClearDataInput, db: DB, user: User = Depends(administrator)):
+    # Coordinate with the worker's shared pipeline lease so a running sync or
+    # prediction job cannot repopulate rows while the reset transaction runs.
+    lock = redis.Redis.from_url(get_settings().redis_url).lock(
+        "sportpredict:pipeline", timeout=900, blocking_timeout=0
+    )
+    try:
+        acquired = lock.acquire(blocking=False)
+    except redis.RedisError:
+        raise HTTPException(503, "Reset unavailable while the background queue is unreachable") from None
+    if not acquired:
+        raise HTTPException(409, "A background job is running. Wait for it to finish, then clear data.")
+    try:
+        deleted = {}
+        for key, model in (("slips", Slip), ("predictions", Prediction), ("fixtures", Fixture),
+                           ("models", ModelVersion), ("teams", Team), ("competitions", Competition),
+                           ("background_jobs", JobRun), ("audit_events", AuditLog)):
+            result = db.execute(delete(model).execution_options(synchronize_session=False))
+            deleted[key] = max(0, result.rowcount or 0)
+        db.add(AuditLog(action="data.cleared", actor=user.email, entity="platform", detail={"deleted": deleted}))
+        db.commit()
+        return {"status": "cleared", "deleted": deleted, "preserved": ["users", "platform_settings", "login_attempts"]}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        try:
+            if lock.owned():
+                lock.release()
+        except redis.RedisError:
+            pass
 
 
 @router.get("/admin/settings")

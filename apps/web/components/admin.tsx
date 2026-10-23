@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowRight, Check, Database, FileSpreadsheet, KeyRound, LoaderCircle, LogOut, Pause, Play, RefreshCw, ShieldCheck, Sparkles, Upload } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, Database, FileSpreadsheet, KeyRound, LoaderCircle, LogOut, Pause, Play, RefreshCw, ShieldCheck, Sparkles, Trash2, Upload } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { api, ApiError, kickoff, percent, readable } from "@/lib/api";
 import { Badge, Empty, ErrorState, Loading, PageHeading, SectionTitle } from "@/components/common";
@@ -52,7 +52,7 @@ export function AdminView({path}: {path:string}) {
   const mutate = async (endpoint:string,body:unknown,method="POST") => {
     if(!user.data) return;
     setBusy(endpoint);setMessage("");setFailed(false);
-    try {const result = await api<Record<string,unknown>>(endpoint,{method,headers:{"X-CSRF-Token":user.data.csrf_token},body:JSON.stringify(body)});setMessage("status" in result && result.status==="queued" ? "Action queued. Follow its progress in the Background jobs list." : "Changes saved.");await client.invalidateQueries();return result;}catch(e){setMessage((e as Error).message);setFailed(true);}finally{setBusy("");}
+    try {const result = await api<Record<string,unknown>>(endpoint,{method,headers:{"X-CSRF-Token":user.data.csrf_token},body:JSON.stringify(body)});if(result.status==="queued")setMessage("Action queued. Follow its progress in the Background jobs list.");else if(result.status==="cleared"){const deleted=result.deleted as Record<string,number>;const total=Object.values(deleted||{}).reduce((sum,count)=>sum+count,0);setMessage(`Data cleared. ${total} stored records removed; your admin account and platform settings were kept.`);}else setMessage("Changes saved.");await client.invalidateQueries();return result;}catch(e){setMessage((e as Error).message);setFailed(true);}finally{setBusy("");}
   };
   if(user.isPending || user.error instanceof ApiError && user.error.status===401) return <Loading/>;
   if(user.error) return <ErrorState error={user.error} retry={() => user.refetch()}/>;
@@ -67,11 +67,11 @@ export function AdminView({path}: {path:string}) {
     <nav className="tabs admin-tabs" aria-label="Admin sections">{adminSections.map(tab => <Link aria-current={section===tab.key?"page":undefined} className={cn(section===tab.key&&"active")} key={tab.key} href={tab.key==="overview" ? "/admin" : "/admin/"+tab.key}>{tab.label}</Link>)}</nav>
     {message && <div role={failed?"alert":"status"} className={cn("notice",failed&&"notice-error")}>{failed ? null : <Check size={15}/>} {message}</div>}
     {canWrite && actionsForSection.length>0 && <section className="panel admin-quick-actions" aria-labelledby="quick-actions-title"><div className="admin-quick-copy"><h2 id="quick-actions-title">{section==="overview"?"Quick actions":section==="models"?"Model training":"Page actions"}</h2><p>{section==="overview"?"Start a task, then follow its status in Background jobs below.":section==="models"?"Training creates a version for review. It does not approve the model or publish predictions.":"Start the relevant task and check its progress in the overview."}</p></div><div className="admin-action-buttons" role="group" aria-label="Administrative actions">{actionsForSection.map(action=>{const Icon=action.icon;const isBusy=busy.endsWith(action.key);return <Button size="sm" variant={action.key==="train"?"default":"outline"} key={action.key} disabled={!!busy} aria-busy={isBusy} onClick={()=>mutate("/admin/jobs/"+action.key,{})}>{isBusy?<LoaderCircle size={14} className="spin"/>:<Icon size={14}/>} {isBusy?"Working...":action.label}</Button>;})}</div>{section==="overview"&&<p className="admin-action-note"><strong>Important:</strong> Run publication pipeline does not train or approve a model. Train and review a model from Models &amp; data first.</p>}</section>}
-    {section==="overview" && <AdminOverview/>}{section==="fixtures" && <AdminFixtures/>}{section==="predictions" && <AdminPredictions canWrite={canWrite} busy={!!busy} mutate={mutate}/>}{section==="codes" && <AdminCodes/>}{section==="models" && <AdminModels canApprove={isAdmin} canUpload={isAdmin} busy={!!busy} csrfToken={user.data?.csrf_token||""} mutate={mutate}/>}{section==="providers" && <AdminProviders/>}{section==="settings" && <SettingsForm canWrite={isAdmin} busy={!!busy} mutate={mutate}/>}
+    {section==="overview" && <AdminOverview canClear={isAdmin} busy={!!busy} mutate={mutate}/>}{section==="fixtures" && <AdminFixtures/>}{section==="predictions" && <AdminPredictions canWrite={canWrite} busy={!!busy} mutate={mutate}/>}{section==="codes" && <AdminCodes/>}{section==="models" && <AdminModels canApprove={isAdmin} canUpload={isAdmin} busy={!!busy} csrfToken={user.data?.csrf_token||""} mutate={mutate}/>}{section==="providers" && <AdminProviders/>}{section==="settings" && <SettingsForm canWrite={isAdmin} busy={!!busy} mutate={mutate}/>}
   </>;
 }
 type Mutate = (endpoint:string,body:unknown,method?:string) => Promise<Record<string,unknown> | undefined>;
-function AdminOverview() {
+function AdminOverview({canClear,busy,mutate}:{canClear:boolean;busy:boolean;mutate:Mutate}) {
   const overview = useApi<Overview & {failed_jobs:number}>("/admin/overview"); const jobs = useApi<Job[]>("/admin/jobs"); const audit = useApi<Audit[]>("/admin/audit");
   if(overview.isPending) return <Loading/>;if(overview.error) return <ErrorState error={overview.error}/>;
   const o=overview.data!;
@@ -84,7 +84,13 @@ function AdminOverview() {
     </div>
     <section className="panel" id="background-jobs"><SectionTitle title="Background jobs" description="Queued work runs in the background. Check status and errors here."/>{jobs.isPending ? <Loading/> : jobs.error ? <ErrorState error={jobs.error}/> : jobs.data?.length ? <div className="table-scroll"><table className="data-table"><thead><tr><th>Activity</th><th>Status</th><th>Attempts</th><th>Last started</th><th>Latest error</th></tr></thead><tbody>{jobs.data.map(j => <tr key={j.id}><td>{readable(j.name)}</td><td><Badge tone={j.status==="succeeded"?"green":j.status==="dead_letter"?"red":"amber"}>{readable(j.status)}</Badge></td><td>{j.attempts}</td><td>{kickoff(j.started_at)}</td><td>{j.error || "-"}</td></tr>)}</tbody></table></div> : <Empty title="No background activity yet" description="Choose a quick action above. Its status will appear here."/>}</section>
     <section className="panel"><SectionTitle title="Recent activity" description="A record of changes and system actions."/>{audit.isPending ? <Loading/> : audit.error ? <ErrorState error={audit.error}/> : audit.data?.length ? <div className="audit-list">{audit.data.map(a => <details key={a.id}><summary><span>{readable(a.action)}<small>{a.actor||"System"} / {a.entity}</small></span><time>{kickoff(a.created_at)}</time></summary><pre>{JSON.stringify(a.detail,null,2)}</pre></details>)}</div> : <Empty title="No activity recorded" description="Admin actions will appear here when they occur."/>}</section>
+    {canClear&&<ClearStoredData busy={busy} mutate={mutate}/>}
   </>;
+}
+function ClearStoredData({busy,mutate}:{busy:boolean;mutate:Mutate}) {
+  const [confirmation,setConfirmation]=useState("");
+  const submit=async()=>{if(confirmation!=="CLEAR ALL DATA"||busy)return;const result=await mutate("/admin/data",{confirmation},"DELETE");if(result)setConfirmation("");};
+  return <section className="panel data-danger-zone" aria-labelledby="clear-data-title"><div className="data-danger-copy"><span className="data-danger-icon"><AlertTriangle size={18}/></span><div><h2 id="clear-data-title">Clear all stored data</h2><p>Removes fixtures and training results, predictions, models, slips, job history and old audit entries. Admin accounts, platform settings and login security records stay in place. The reset is recorded in the audit log. A later provider sync can import fixtures again.</p></div></div><label htmlFor="clear-data-confirm">Type <strong>CLEAR ALL DATA</strong> to confirm</label><div className="data-danger-action"><input id="clear-data-confirm" value={confirmation} onChange={event=>setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} disabled={busy} placeholder="CLEAR ALL DATA"/><Button className="button-danger" disabled={busy||confirmation!=="CLEAR ALL DATA"} aria-busy={busy} onClick={submit}>{busy?<LoaderCircle className="spin" size={15}/>:<Trash2 size={15}/>} {busy?"Clearing data…":"Clear all data"}</Button></div></section>;
 }
 function AdminFixtures() {
   const result=useApi<Page<Fixture>>("/fixtures?status=all&limit=100");

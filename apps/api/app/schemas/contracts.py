@@ -101,5 +101,9 @@ class SlipInput(BaseModel):
     prediction_ids: list[int] = Field(min_length=1, max_length=3)
 
 
+class ClearDataInput(BaseModel):
+    confirmation: Literal["CLEAR ALL DATA"]
+
+
 class ApprovalInput(BaseModel):
     approved: bool

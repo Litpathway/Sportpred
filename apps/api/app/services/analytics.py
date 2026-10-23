@@ -2,7 +2,7 @@ import math
 from collections import Counter, defaultdict
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ml.engine import evaluate, outcomes
@@ -29,7 +29,8 @@ def settle_results(db: Session) -> dict:
 
 def performance(db: Session, simulated: bool | None = None) -> dict:
     domain = get_settings().demo_mode if simulated is None else simulated
-    rows = list(db.scalars(select(Prediction).where(Prediction.fixture.has(Fixture.simulated == domain)).order_by(Prediction.created_at)))
+    latest_ids = select(func.max(Prediction.id)).group_by(Prediction.fixture_id, Prediction.market)
+    rows = list(db.scalars(select(Prediction).where(Prediction.id.in_(latest_ids), Prediction.fixture.has(Fixture.simulated == domain)).order_by(Prediction.created_at)))
     counts = Counter(p.outcome for p in rows)
     done = [p for p in rows if p.outcome in {"won", "lost"}]
     market_rows, bands, versions = defaultdict(list), defaultdict(list), defaultdict(list)

@@ -11,7 +11,7 @@ from app.providers.booking import booking_provider
 from app.providers.fixtures import fixture_provider
 from app.services.analytics import drift_report, settle_results
 from app.services.ingestion import sync_fixtures
-from app.services.predictions import generate_predictions, refilter, train_and_register
+from app.services.predictions import generate_predictions, latest_prediction_ids, refilter, train_and_register
 from app.services.publication import build_slip, monitor_codes, publish_candidates
 from app.workers.celery_app import celery
 
@@ -41,7 +41,7 @@ def execute_job(name, db):
     if name == "filter":
         return refilter(db)
     if name == "slips":
-        rows = list(db.scalars(select(Prediction).where(Prediction.eligible.is_(True)).order_by(Prediction.probability.desc())))
+        rows = list(db.scalars(select(Prediction).where(Prediction.id.in_(latest_prediction_ids()), Prediction.eligible.is_(True)).order_by(Prediction.probability.desc())))
         count, seen = 0, set()
         for p in rows:
             if p.fixture_id in seen:
