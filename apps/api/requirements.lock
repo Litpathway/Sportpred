@@ -48,6 +48,7 @@ pytest==9.1.1
 pytest-cov==7.1.0
 python-dateutil==3.0.0
 python-dotenv==1.2.4
+python-multipart==0.0.20
 pytz==2026.5
 PyYAML==6.0.3
 redis==6.4.0

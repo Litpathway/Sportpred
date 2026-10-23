@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.services.analytics import performance
 from app.services.ingestion import platform_settings
 from app.services.predictions import latest_prediction_ids, refilter
 from app.services.publication import build_slip
+from app.services.csv_training import import_training_csv
 
 router = APIRouter(prefix="/api")
 DB = Annotated[Session, Depends(get_db)]
@@ -236,6 +237,20 @@ def settings_update(payload: SettingsInput, db: DB, user: User = Depends(adminis
 @router.get("/admin/models")
 def models(db: DB, user: User = Depends(reader)):
     return [model_json(m) for m in db.scalars(select(ModelVersion).order_by(ModelVersion.created_at.desc()))]
+
+
+@router.post("/admin/training-data/csv")
+async def upload_training_csv(file: UploadFile, db: DB, user: User = Depends(administrator)):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(422, "Choose a .csv file")
+    content = await file.read(3_000_001)
+    if len(content) > 3_000_000:
+        raise HTTPException(413, "CSV must be 3 MB or smaller")
+    try:
+        result = import_training_csv(db, content, file.filename, user.email)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return result
 
 
 @router.put("/admin/models/{model_id}/approval")
