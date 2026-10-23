@@ -85,7 +85,7 @@ def import_training_csv(db: Session, content: bytes, filename: str, actor: str) 
             if slug not in EUROPEAN_LEAGUES:
                 errors.append(f"row {line}: {label} is not enabled in this site")
                 continue
-            home, away = (row.get(selected[k]) or "").strip() for k in ("home", "away")
+            home, away = ((row.get(selected[k]) or "").strip() for k in ("home", "away"))
             try:
                 kickoff = _parse_date(row.get(selected["date"]) or "")
                 hg_raw, ag_raw = row.get(selected["home_goals"]), row.get(selected["away_goals"])
