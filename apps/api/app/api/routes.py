@@ -25,8 +25,20 @@ def stamp(value):
     return value.isoformat() + "Z" if value else None
 
 
+def team_logo(team: Team, provider: str) -> str | None:
+    """Use the badge URL for a team identity supplied by API-Football only."""
+    prefix = "api-football:team:"
+    if provider != "api_football" or not team.identity.startswith(prefix):
+        return None
+    external_id = team.identity.removeprefix(prefix)
+    if not external_id.isdigit():
+        return None
+    return f"https://media.api-sports.io/football/teams/{external_id}.png"
+
+
 def fixture_json(f: Fixture) -> dict:
     return {"id": f.id, "home": f.home.name, "away": f.away.name, "competition": f.competition.name,
+            "home_logo": team_logo(f.home, f.provider), "away_logo": team_logo(f.away, f.provider),
             "country": f.competition.country, "league_slug": f.competition.league_slug,
             "kickoff": stamp(f.kickoff), "status": f.status, "simulated": f.simulated,
             "home_goals": f.home_goals, "away_goals": f.away_goals, "synced_at": stamp(f.synced_at),

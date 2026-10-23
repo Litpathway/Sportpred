@@ -1,5 +1,5 @@
 export interface Fixture {
-  id: number; home: string; away: string; competition: string; country: string;
+  id: number; home: string; away: string; home_logo?: string | null; away_logo?: string | null; competition: string; country: string;
   kickoff: string; status: string; simulated: boolean; home_goals: number | null; away_goals: number | null;
   synced_at: string; odds: Record<string, number>; odds_at: string | null; enrichment: Record<string, unknown>;
   provenance?: {rights?: {prototype_only: boolean; commercial_use: boolean}; observed_at?: string; source?: string; coverage?: string;
