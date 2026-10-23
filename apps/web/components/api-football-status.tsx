@@ -12,9 +12,13 @@ interface Connection {
   last_warnings: {reason?: string; detail?: string; league_slug?: string}[];
   last_error?: {reason?: string; endpoint?: string} | null;
 }
+interface SportyBetStatus {
+  enabled: boolean; region: string;
+  sync?: {status: string; matched_fixtures: number; observed_at: string} | null;
+}
 
 export function ApiFootballStatus() {
-  const query = useApi<{api_football?: Connection}>("/admin/providers");
+  const query = useApi<{api_football?: Connection; sportybet_odds?: SportyBetStatus}>("/admin/providers");
   const connection = query.data?.api_football;
   if (!connection?.configured) return null;
   return <section className="panel provider-card">
@@ -32,6 +36,15 @@ export function ApiFootballStatus() {
         {warning.league_slug ? `${readable(warning.league_slug)}: ` : ""}{readable(warning.reason || "Provider notice")}
         {warning.detail ? ` — ${warning.detail}` : ""}
       </span>)}
+    </div>}
+    {query.data?.sportybet_odds?.enabled && <div className="provider-card">
+      <SectionTitle title="SportyBet odds overlay" description="Read-only market quotes matched to existing API-Football fixtures."/>
+      <Badge tone={query.data.sportybet_odds.sync?.status === "ok" ? "green" : "amber"}>{readable(query.data.sportybet_odds.sync?.status || "waiting for sync")}</Badge>
+      <dl><dt>Region</dt><dd>{query.data.sportybet_odds.region}</dd>
+        <dt>Matched fixtures</dt><dd>{query.data.sportybet_odds.sync?.matched_fixtures ?? 0}</dd>
+        {query.data.sportybet_odds.sync?.observed_at && <><dt>Last read</dt><dd>{kickoff(query.data.sportybet_odds.sync.observed_at)} WAT</dd></>}
+      </dl>
+      <p>Unofficial feed. Odds are snapshots, not model probabilities. No booking or wager is submitted.</p>
     </div>}
   </section>;
 }

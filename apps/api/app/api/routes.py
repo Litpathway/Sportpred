@@ -29,7 +29,7 @@ def fixture_json(f: Fixture) -> dict:
             "country": f.competition.country, "league_slug": f.competition.league_slug,
             "kickoff": stamp(f.kickoff), "status": f.status, "simulated": f.simulated,
             "home_goals": f.home_goals, "away_goals": f.away_goals, "synced_at": stamp(f.synced_at),
-            "odds_at": stamp(f.odds_at), "enrichment": f.enrichment,
+            "odds": f.odds or {}, "odds_at": stamp(f.odds_at), "enrichment": f.enrichment,
             "provenance": f.enrichment.get("provenance", {}), "provider": f.provider}
 
 
@@ -260,6 +260,8 @@ def providers(db: DB, user: User = Depends(reader)):
     api_football = {"configured": settings.fixture_provider == "api_football", "key_present": bool(settings.api_football_key),
         "daily_budget": settings.api_football_daily_budget, "pipeline_interval_minutes": settings.pipeline_interval_minutes,
         "account": None, "last_warnings": last_sync.detail.get("warnings", []) if last_sync else []}
+    sportybet_odds = {"enabled": settings.sportybet_odds_enabled, "region": settings.sportybet_region.upper(),
+                      "status": "disabled" if not settings.sportybet_odds_enabled else "waiting_for_sync"}
     if settings.fixture_provider == "api_football" and settings.api_football_key:
         from app.providers.api_football import RedisApiCache
         from app.providers.fixtures import ProviderFailure
@@ -270,6 +272,7 @@ def providers(db: DB, user: User = Depends(reader)):
             if latest:
                 api_football["last_warnings"] = latest.get("warnings", [])
             api_football["last_error"] = cache.get("last_error")
+            sportybet_odds["sync"] = cache.get("sportybet:sync_status")
         except ProviderFailure:
             api_football["cache_status"] = "unavailable"
     return {"fixtures": {"name": settings.fixture_provider, "enabled": platform_settings(db).provider_enabled,
@@ -278,6 +281,7 @@ def providers(db: DB, user: User = Depends(reader)):
             "booking": {"name": settings.booking_provider, "genuine_enabled": settings.booking_provider == "authorized" and bool(settings.booking_api_url and settings.booking_api_token) and not settings.demo_mode},
             "recent_failure_count": len(recent_failures),
             "api_football": api_football,
+            "sportybet_odds": sportybet_odds,
             "sports_skills": {"configured": settings.fixture_provider == "sports_skills", "personal_use_opt_in": settings.sports_skills_personal_use,
                 "production_allowed": False, "competitions": settings.sports_skills_competitions.split(","),
                 "source_commit": "bdb972c0625fa337e15f18ca58abd28f57f25e37", "history_enabled": settings.sports_skills_history}}

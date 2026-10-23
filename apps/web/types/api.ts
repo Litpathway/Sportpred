@@ -1,8 +1,9 @@
 export interface Fixture {
   id: number; home: string; away: string; competition: string; country: string;
   kickoff: string; status: string; simulated: boolean; home_goals: number | null; away_goals: number | null;
-  synced_at: string; odds_at: string | null; enrichment: Record<string, unknown>;
-  provenance?: {rights?: {prototype_only: boolean; commercial_use: boolean}; observed_at?: string; source?: string; coverage?: string}; provider?: string;
+  synced_at: string; odds: Record<string, number>; odds_at: string | null; enrichment: Record<string, unknown>;
+  provenance?: {rights?: {prototype_only: boolean; commercial_use: boolean}; observed_at?: string; source?: string; coverage?: string;
+    odds?: {source?: string; bookmaker?: string; provider_updated_at?: string | null; observed_at?: string; market_count?: number}}; provider?: string;
 }
 export interface Prediction {
   id: number; fixture: Fixture; market: string; market_label: string; probability: number;
@@ -43,4 +44,5 @@ export interface Audit {id: number; action: string; actor: string; entity: strin
 export interface Providers {
   fixtures: {name: string; enabled: boolean; last_sync: string | null; status: string};
   booking: {name: string; genuine_enabled: boolean}; recent_failure_count: number;
+  sportybet_odds?: {enabled: boolean; region: string; status: string; sync?: {status: string; matched_fixtures: number; observed_at: string} | null};
 }

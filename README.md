@@ -2,7 +2,7 @@
 
 **GitHub → Vercel deployment:** see [docs/VERCEL.md](docs/VERCEL.md). The root configuration deploys the site, API and production workers together. The ten selected European top flights are configured; live data requires an authorized feed.
 
-**Native API-Football:** [connection and quota guide](docs/API_FOOTBALL.md). The direct adapter imports real fixtures and odds, records truthful observation times, and shares its cache and request budget across workers. Match pages can show current form while the calibrated model awaits sufficient verified history.
+**Native API-Football:** [connection and quota guide](docs/API_FOOTBALL.md). The direct adapter imports real fixtures and odds, records truthful observation times, and shares its cache and request budget across workers. An optional [SportyBet odds overlay](docs/SPORTYBET.md) adds read-only market quotes to exact match-page fixture matches. Neither feed replaces the verified history required to train an approved prediction model.
 
 A working Next.js/FastAPI football intelligence application with persisted fixtures, reproducible Poisson/XGBoost predictions, calibration, approval and quality controls, candidate slips, publication and settlement. It never places wagers or handles money.
 

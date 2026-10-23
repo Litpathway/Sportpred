@@ -298,6 +298,18 @@ class ApiFootballProvider:
             except (ProviderFailure, ValueError, TypeError, KeyError) as exc:
                 self.warnings.append({"reason": "odds_unavailable", "fixture": row.external_id,
                     "detail": str(exc) if isinstance(exc, ProviderFailure) else "Invalid odds response"})
+        fixtures = [FixtureDTO.model_validate(row.model_dump()) for row in rows.values()]
+        if self.settings.sportybet_odds_enabled:
+            try:
+                from app.providers.sportybet import SportyBetOddsOverlay
+                overlay = SportyBetOddsOverlay(self.settings, self.cache)
+                matched = overlay.apply(fixtures)
+                self.cache.set("sportybet:sync_status", {"status": "ok", "matched_fixtures": matched,
+                    "observed_at": datetime.now(UTC).isoformat()}, 86400)
+            except ProviderFailure as exc:
+                self.warnings.append({"reason": "sportybet_odds_unavailable", "detail": str(exc)})
+                self.cache.set("sportybet:sync_status", {"status": "unavailable", "reason": str(exc),
+                    "observed_at": datetime.now(UTC).isoformat()}, 3600)
         self.cache.set("sync_status", {"status": "partial" if self.warnings else "ok", "warnings": self.warnings,
             "fixtures": len(rows), "requests": self.calls}, 86400)
-        return [FixtureDTO.model_validate(row.model_dump()) for row in rows.values()]
+        return fixtures

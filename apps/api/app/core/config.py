@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     api_football_bookmaker_id: int | None = Field(default=None, ge=1)
     api_football_fixture_cache_minutes: int = Field(default=60, ge=5, le=360)
     api_football_odds_cache_minutes: int = Field(default=180, ge=5, le=360)
+    sportybet_odds_enabled: bool = False
+    sportybet_region: str = Field(default="ng", pattern=r"^[a-z]{2}$")
+    sportybet_cache_seconds: int = Field(default=300, ge=90, le=3600)
     pipeline_interval_minutes: int = Field(default=15, ge=5, le=360)
     enabled_leagues: str = DEFAULT_LEAGUES
     sports_skills_personal_use: bool = False

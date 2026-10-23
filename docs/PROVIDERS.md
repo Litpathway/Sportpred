@@ -51,4 +51,4 @@ Authorized feeds must supply a canonical `league_slug` from the [ten-league cata
 
 The gateway must preserve the selection mapping and enforce the same idempotency key even after worker crashes. Validation must establish that the real code represents the **exact** selected fixtures and markets. A generic “code exists” response is insufficient. Mock-prefix codes, mismatched selections, unverified responses and any provider exception fall back to prediction-only publication. Simulated selections are never sent to a genuine provider.
 
-There is no SportyBet endpoint implementation, token, scraper, account automation, stake, deposit, withdrawal or wager submission. Keep real code generation unavailable until your authorized provider supports this contract.
+The optional [SportyBet read-only odds overlay](SPORTYBET.md) is separate from this authorized booking gateway. It uses SportyBet's undocumented public web feed for current quotes only. This site does not create booking codes or submit wagers through that feed. Keep genuine code generation unavailable until an authorized provider supports the exact validation contract above.
