@@ -74,3 +74,5 @@ input,select,.search-field{background:#fff;border-color:#d8e2ea;color:#20364e}in
 @media(max-width:600px){.data-danger-zone{padding:17px}.data-danger-action{align-items:stretch;flex-direction:column}.data-danger-action .button{justify-content:center}}
 .job-error{display:block;max-width:320px;white-space:normal;overflow-wrap:anywhere;color:#875247}
 .filters-note{margin:-14px 0 18px;font-size:11px;color:#64788b}
+.filters-note-warning{margin-top:-10px;color:#8a5c25}
+.prediction-status{display:grid;justify-items:start;gap:4px}.prediction-reason{color:#8a5c25;font-size:9px;line-height:1.3}

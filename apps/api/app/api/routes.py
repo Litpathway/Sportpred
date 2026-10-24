@@ -14,7 +14,7 @@ from app.models.entities import AuditLog, Competition, Fixture, JobRun, LoginAtt
 from app.schemas.contracts import ApprovalInput, ClearDataInput, LoginInput, MARKET_LABELS, SettingsInput, SlipInput
 from app.services.analytics import performance
 from app.services.ingestion import platform_settings
-from app.services.predictions import latest_prediction_ids, refilter
+from app.services.predictions import eligibility, latest_prediction_ids, refilter
 from app.services.publication import build_slip
 from app.services.csv_training import import_training_csv
 
@@ -47,10 +47,12 @@ def fixture_json(f: Fixture) -> dict:
             "provenance": f.enrichment.get("provenance", {}), "provider": f.provider}
 
 
-def prediction_json(p: Prediction) -> dict:
+def prediction_json(p: Prediction, current_reasons: list[str] | None = None) -> dict:
+    reasons = current_reasons if current_reasons is not None else p.reasons
+    eligible = not reasons if current_reasons is not None and p.outcome == "pending" else p.eligible
     return {"id": p.id, "fixture": fixture_json(p.fixture), "market": p.market, "market_label": MARKET_LABELS.get(p.market, p.market),
             "probability": p.probability, "raw_probability": p.raw_probability, "quality": p.quality,
-            "odds": p.odds, "eligible": p.eligible, "reasons": p.reasons, "outcome": p.outcome,
+            "odds": p.odds, "eligible": eligible, "reasons": reasons, "outcome": p.outcome,
             "explanation": p.explanation, "features": p.features, "created_at": stamp(p.created_at),
             "model": p.model.version, "model_approved": p.model.approved, "generation": p.generation}
 
@@ -134,7 +136,7 @@ def fixture_detail(fixture_id: int, db: DB):
     from app.ml.features import features_for
     history = list(db.scalars(select(Fixture).where(Fixture.status == "finished")))
     evidence = features_for(fixture, history, cutoff=utcnow()) if fixture.status == "scheduled" else None
-    return {"fixture": fixture_json(fixture), "predictions": [prediction_json(p) for p in db.scalars(
+    return {"fixture": fixture_json(fixture), "predictions": [prediction_json(p, eligibility(p, db) if p.outcome == "pending" else p.reasons) for p in db.scalars(
         select(Prediction).where(Prediction.fixture_id == fixture_id, Prediction.id.in_(latest_prediction_ids())).order_by(Prediction.probability.desc()))],
         "evidence": evidence.detail if evidence else None,
         "data_status": "available" if db.scalar(select(Prediction.id).where(Prediction.fixture_id == fixture_id).limit(1)) else "insufficient_data"}
@@ -161,14 +163,22 @@ def predictions(db: DB, high_confidence: bool = False, latest_only: bool = True,
         from app.models.entities import Team
         query = query.where(or_(Fixture.home.has(Team.name.ilike(f"%{q}%")), Fixture.away.has(Team.name.ilike(f"%{q}%"))))
     if best_per_match:
-        ranked = query.add_columns(func.row_number().over(
-            partition_by=Prediction.fixture_id,
-            order_by=(Prediction.probability.desc(), Prediction.id.desc()),
-        ).label("match_rank")).subquery()
-        query = select(Prediction).join(ranked, ranked.c.id == Prediction.id).where(ranked.c.match_rank == 1)
-        query = query.order_by(Prediction.probability.desc(), Prediction.id)
+        candidates = list(db.scalars(query.order_by(None)))
+        reasons_by_id = {p.id: eligibility(p, db) if p.outcome == "pending" else p.reasons for p in candidates}
+        grouped: dict[int, list[Prediction]] = {}
+        for prediction in candidates:
+            grouped.setdefault(prediction.fixture_id, []).append(prediction)
+        candidates = []
+        for predictions_for_match in grouped.values():
+            eligible = [p for p in predictions_for_match if not reasons_by_id[p.id]]
+            candidates.append(max(eligible or predictions_for_match, key=lambda p: (p.probability, p.id)))
+        candidates.sort(key=lambda p: (-p.probability, p.id))
+        total = len(candidates)
+        selected = candidates[offset:offset + limit]
+        return {"items": [prediction_json(p, reasons_by_id[p.id]) for p in selected], "total": total}
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    return {"items": [prediction_json(p) for p in db.scalars(query.limit(limit).offset(offset))], "total": total}
+    items = list(db.scalars(query.limit(limit).offset(offset)))
+    return {"items": [prediction_json(p, eligibility(p, db) if p.outcome == "pending" else p.reasons) for p in items], "total": total}
 
 
 @router.get("/slips")

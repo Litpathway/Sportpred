@@ -105,9 +105,13 @@ function PredictionsView({high}: {high: boolean}) {
   const bestPerMatch = market === "best_per_match";
   const query = new URLSearchParams({q,competition,market:bestPerMatch ? "" : market,best_per_match:String(bestPerMatch),high_confidence:String(high),limit:"24",offset:String(offset)});
   const result = useApi<Page<Prediction>>(`/predictions?${query}`);
+  const fixtureQuery = new URLSearchParams({q,competition,status:"scheduled",limit:"100"});
+  const upcoming = useApi<Page<Fixture>>(`/fixtures?${fixtureQuery}`, bestPerMatch && !high);
+  const missingEstimates = Math.max(0, (upcoming.data?.total ?? 0) - (result.data?.total ?? 0));
   return <><PageHeading eyebrow={high ? "PUBLICATION FILTER" : "MODEL ESTIMATES"} title={high ? "High-confidence predictions" : "Predictions"} description={high ? `At least ${percent(overview?.threshold ?? .8)} calibrated probability, plus data quality, freshness and model approval checks.` : "Filter by team, competition or market to review estimates and outcomes."} action={<Badge tone="green"><Target size={13}/>{high ? "Eligibility checks applied" : "All confidence levels"}</Badge>}/>{overview && <DemoBanner demo={overview.demo_mode}/>}
     <Filters q={q} onQ={v => {setQ(v);setOffset(0);}} competition={competition} onCompetition={v => {setCompetition(v);setOffset(0);}}><select aria-label="Prediction market" value={market} onChange={e => {setMarket(e.target.value);setOffset(0);}}><option value="">All markets</option><option value="best_per_match">Best option per match</option>{["home_win","draw","away_win","home_or_draw","away_or_draw","home_or_away","over_2_5","under_2_5","btts_yes","btts_no"].map(m => <option key={m} value={m}>{readable(m)}</option>)}</select></Filters>
-    {bestPerMatch && <p className="filters-note">One estimate per match: the market with the highest model probability. Eligibility is shown separately.</p>}
+    {bestPerMatch && <p className="filters-note">One estimate per match. Eligible markets are preferred; if none pass the checks, the highest-probability estimate is shown with its status.</p>}
+    {bestPerMatch && !high && missingEstimates > 0 && <p className="filters-note filters-note-warning">{missingEstimates} of {upcoming.data?.total} upcoming matches have no model estimate because there is not enough verified history.</p>}
     <section className="panel">{result.isPending ? <Loading/> : result.error ? <ErrorState error={result.error} retry={() => result.refetch()}/> : result.data?.items.length ? <PredictionTable items={result.data.items}/> : <Empty title={high ? "No selections currently pass every check" : "No predictions available"} description={high ? "A probability threshold is a filter, never a quota. We publish only when all checks pass." : "An approved model and enough historical data are required."}/>}</section><Pagination offset={offset} total={result.data?.total || 0} onChange={setOffset}/>
   </>;
 }
