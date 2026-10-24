@@ -1,5 +1,7 @@
 # SportPredict AI
 
+Approved interface, design research, and the current frontend QA audit: [docs/DESIGN.md](docs/DESIGN.md).
+
 **GitHub → Vercel deployment:** see [docs/VERCEL.md](docs/VERCEL.md). The root configuration deploys the site, API and production workers together. The ten selected European top flights are configured; live data requires an authorized feed.
 
 **Native API-Football:** [connection and quota guide](docs/API_FOOTBALL.md). The direct adapter imports real fixtures and odds, records truthful observation times, and shares its cache and request budget across workers. An optional [SportyBet odds overlay](docs/SPORTYBET.md) adds read-only market quotes to exact match-page fixture matches. Neither feed replaces the verified history required to train an approved prediction model.

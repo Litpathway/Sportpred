@@ -1,5 +1,5 @@
 "use client";
-import { AlertCircle, ArrowUpRight, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowUpRight, RefreshCw, Inbox } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ export function PageHeading({eyebrow, title, description, action}: {eyebrow?: st
 }
 export function Loading() { return <div role="status" aria-label="Loading data" className="loading-grid">{[1,2,3,4].map(n => <div className="skeleton" key={n} />)}<span className="sr-only">Loading data…</span></div>; }
 export function ErrorState({error, retry}: {error: Error; retry?: () => void}) { return <div className="empty-state" role="alert"><AlertCircle size={30}/><h3>We couldn’t load this data</h3><p>{error.message}</p>{retry && <Button variant="outline" onClick={retry}><RefreshCw size={15}/> Try again</Button>}</div>; }
-export function Empty({title, description}: {title: string; description: string}) { return <div className="empty-state"><ShieldCheck size={30}/><h3>{title}</h3><p>{description}</p></div>; }
+export function Empty({title, description}: {title: string; description: string}) { return <div className="empty-state"><Inbox size={30}/><h3>{title}</h3><p>{description}</p></div>; }
 export function SectionTitle({title, description, href, label = "View all"}: {title: string; description?: string; href?: string; label?: string}) {
   return <div className="section-title"><div><h2>{title}</h2>{description && <p>{description}</p>}</div>{href && <Link href={href} className="text-link">{label} <ArrowUpRight size={15}/></Link>}</div>;
 }

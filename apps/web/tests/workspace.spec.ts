@@ -22,22 +22,23 @@ test.beforeEach(async({page})=>{
   });
 });
 
-test("overview labels simulations and uses API counts",async({page})=>{
-  await page.goto("/");await expect(page.getByRole("heading",{name:"A clearer view of the game."})).toBeVisible();
+test("overview labels simulations and uses API counts",async({page},testInfo)=>{
+  await page.goto("/");await expect(page.getByRole("heading",{name:"Football predictions"})).toBeVisible();
   await expect(page.getByText("Demo workspace",{exact:true})).toBeVisible();
   await expect(page.locator(".stat-value").first()).toHaveText("12");
   await expect(page.getByText("84.0%",{exact:true})).toBeVisible();
   await expect(page.getByText("Settled accuracy",{exact:true})).toBeVisible();
   await expect(page.locator("html")).toHaveJSProperty("scrollWidth",await page.evaluate(()=>document.documentElement.clientWidth));
+  await page.screenshot({path:testInfo.outputPath("approved-dashboard.png"),fullPage:true});
 });
 
 test("search, empty state and match analysis",async({page})=>{
   await page.goto("/matches");await expect(page.getByRole("link",{name:/England Demo League.*Simulated/})).toBeVisible();
   await page.getByRole("textbox",{name:"Search matches"}).fill("Missing");await expect(page.getByRole("heading",{name:"No matches found"})).toBeVisible();
   await page.getByRole("textbox",{name:"Search matches"}).fill("Northbridge");
-  await page.locator(".match-card").first().click();await expect(page.getByRole("heading",{name:"The match, beyond the odds."})).toBeVisible();
+  await page.locator(".match-card").first().click();await expect(page.getByRole("heading",{name:"Northbridge FC vs Briarwood"})).toBeVisible();
   await expect(page.getByText("84.0%",{exact:true}).first()).toBeVisible();
-  await expect(page.getByRole("heading",{name:"What the data doesn’t tell us"})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Missing inputs"})).toBeVisible();
 });
 
 test("ten-league coverage shows missing live data without fabricating fixtures",async({page})=>{
@@ -64,7 +65,7 @@ test("verified-code feed refuses to fabricate a code",async({page})=>{
 });
 
 test("performance separates unpublished history from evaluation",async({page})=>{
-  await page.goto("/performance");await expect(page.getByRole("heading",{name:"The track record starts with settlement"})).toBeVisible();
+  await page.goto("/performance");await expect(page.getByRole("heading",{name:"No settled predictions yet"})).toBeVisible();
   await expect(page.getByText("No published predictions have settled yet.",{exact:false})).toBeVisible();
 });
 
@@ -88,6 +89,7 @@ test("mobile navigation exposes active routes and closes with Escape",async({pag
   await expect(page.getByRole("link",{name:/High confidence/})).toHaveAttribute("aria-current","page");
   await page.keyboard.press("Escape");
   await expect(menu).toHaveAttribute("aria-expanded","false");
+  await expect(page.locator(".sidebar")).toHaveAttribute("inert", "");
   await menu.click();
   await page.getByRole("link",{name:"Performance"}).click();
   await expect(page).toHaveURL(/\/performance$/);

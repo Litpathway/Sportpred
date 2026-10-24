@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const config: NextConfig = {
   output: "standalone",
+  // Optional local/CI limit for hosts with small commit-memory budgets.
+  ...(Number.isInteger(Number(process.env.NEXT_BUILD_CPUS)) && Number(process.env.NEXT_BUILD_CPUS) > 0
+    ? {experimental: {cpus: Number(process.env.NEXT_BUILD_CPUS)}} : {}),
   poweredByHeader: false,
   async rewrites() {
     // Vercel's root service router sends /api directly to FastAPI.

@@ -5,12 +5,12 @@ import path from "node:path";
 test.skip(!process.env.E2E_LIVE,"Requires a seeded running FastAPI backend; see README.");
 
 test("real database predictions flow through match analysis",async({page},testInfo)=>{
-  await page.goto("/");await expect(page.getByRole("heading",{name:"A clearer view of the game."})).toBeVisible();
-  await expect(page.locator(".predictions-table tbody tr").first()).toBeVisible();
+  await page.goto("/");await expect(page.getByRole("heading",{name:"Football predictions"})).toBeVisible();
+  await expect(page.locator(".prediction-spotlight-card").first()).toBeVisible();
   const dimensions=await page.evaluate(()=>({width:document.documentElement.scrollWidth,viewport:document.documentElement.clientWidth}));
   expect(dimensions.width, "The real dashboard must fit the viewport").toBe(dimensions.viewport);
   await page.screenshot({path:testInfo.outputPath("dashboard.png"),fullPage:true,scale:"css"});
-  await page.locator(".match-cell").first().click();await expect(page.getByRole("heading",{name:"Behind the prediction"})).toBeVisible();
+  await page.locator(".prediction-spotlight-card").first().click();await expect(page.getByRole("heading",{name:"Behind the prediction"})).toBeVisible();
   await expect(page.locator(".market-row")).toHaveCount(10);
   await expect(page.locator(".model-reference")).toContainText("ensemble-v1-demo");
 });

@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { AlertTriangle, ArrowRight, Check, Database, FileSpreadsheet, KeyRound, LoaderCircle, LogOut, Pause, Play, RefreshCw, ShieldCheck, Sparkles, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowRight, BarChart3, Check, Database, FileSpreadsheet, KeyRound, LoaderCircle, LogOut, Pause, Play, RefreshCw, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { api, ApiError, kickoff, percent, readable } from "@/lib/api";
 import { Badge, Empty, ErrorState, Loading, PageHeading, SectionTitle } from "@/components/common";
@@ -21,9 +21,9 @@ export function LoginView() {
   const [ready,setReady] = useState(false);
   useEffect(() => setReady(true), []);
   const {register,handleSubmit,formState:{errors,isSubmitting}} = useForm<z.infer<typeof loginSchema>>({resolver:zodResolver(loginSchema)});
-  return <div className="login-wrap"><div className="panel login-panel"><span className="login-icon"><KeyRound size={25}/></span><div className="eyebrow">ADMINISTRATION</div><h1>Welcome to the control room.</h1><p>Sign in to manage data, models and publication.</p><form onSubmit={handleSubmit(async values => {setError("");try {const user = await api<AdminUser>("/auth/login",{method:"POST",body:JSON.stringify(values)});client.setQueryData(["/auth/me"],user);router.push("/admin");} catch(e) {setError((e as Error).message);}})}>
+  return <div className="login-wrap"><div className="panel login-panel"><span className="login-icon"><KeyRound size={25}/></span><div className="eyebrow">ADMINISTRATION</div><h1>Admin sign-in</h1><p>Sign in to manage data, models and publication.</p><form onSubmit={handleSubmit(async values => {setError("");try {const user = await api<AdminUser>("/auth/login",{method:"POST",body:JSON.stringify(values)});client.setQueryData(["/auth/me"],user);router.push("/admin");} catch(e) {setError((e as Error).message);}})}>
   <fieldset disabled={!ready || isSubmitting}><label>Email address<input autoComplete="username" type="email" {...register("email")}/></label>{errors.email && <small className="field-error">{errors.email.message}</small>}
-  <label>Password<input autoComplete="current-password" type="password" {...register("password")}/></label>{errors.password && <small className="field-error">{errors.password.message}</small>}{error && <div className="form-error" role="alert">{error}</div>}<Button type="submit" disabled={isSubmitting}>{isSubmitting ? <LoaderCircle className="spin" size={16}/> : <ArrowRight size={16}/>} Sign in</Button></fieldset></form><div className="login-note"><ShieldCheck size={15}/> Role-based access · Secure session cookies</div><p className="footnote">Use the admin account created with the setup command. Credentials are never supplied by the frontend.</p></div></div>;
+  <label>Password<input autoComplete="current-password" type="password" {...register("password")}/></label>{errors.password && <small className="field-error">{errors.password.message}</small>}{error && <div className="form-error" role="alert">{error}</div>}<Button type="submit" disabled={isSubmitting}>{isSubmitting ? <LoaderCircle className="spin" size={16}/> : <ArrowRight size={16}/>} Sign in</Button></fieldset></form><p className="login-note">Contact the site administrator if you need access.</p></div></div>;
 }
 
 const adminSections = [
@@ -37,7 +37,7 @@ const adminSections = [
 ] as const;
 const quickActions = [
   {key:"sync",label:"Sync fixture data",icon:RefreshCw},
-  {key:"train",label:"Train model",icon:Sparkles},
+  {key:"train",label:"Train model",icon:BarChart3},
   {key:"predict",label:"Generate predictions",icon:Play},
   {key:"pipeline",label:"Run publication pipeline",icon:RefreshCw},
   {key:"settle",label:"Settle finished matches",icon:Check},
