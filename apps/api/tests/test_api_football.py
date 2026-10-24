@@ -96,6 +96,54 @@ def test_native_feed_authentication_mapping_cache_and_no_external_prediction_cal
         assert {r.url.path for r in calls} == {"/status", "/leagues", "/fixtures", "/odds"}
 
 
+def test_sportybet_overlay_avoids_duplicate_api_football_odds_requests(monkeypatch):
+    from app.providers import sportybet
+
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if request.url.path == "/status":
+            return wrapped({"subscription": {"plan": "Free", "active": True}, "requests": {"current": 1, "limit_day": 100}})
+        if request.url.path == "/leagues":
+            return wrapped(metadata())
+        if request.url.path == "/fixtures" and "league" in request.url.params:
+            return wrapped([])
+        if request.url.path == "/fixtures":
+            return wrapped([fixture()])
+        raise AssertionError(f"Unexpected API-Football request: {request.url.path}")
+
+    class Overlay:
+        def __init__(self, settings, cache):
+            pass
+
+        def apply(self, rows):
+            rows[0].odds = {"home_win": 1.8}
+            return 1
+
+    monkeypatch.setattr(sportybet, "SportyBetOddsOverlay", Overlay)
+    with client(handler) as http:
+        rows = ApiFootballProvider(settings(sportybet_odds_enabled=True), client=http, cache=MemoryCache()).fetch()
+
+    assert rows[0].odds == {"home_win": 1.8}
+    assert all(request.url.path != "/odds" for request in calls)
+
+
+def test_exhausted_schedule_budget_is_reported_as_deferred():
+    def handler(request):
+        if request.url.path == "/status":
+            return wrapped({"subscription": {"plan": "Free", "active": True}, "requests": {"current": 1, "limit_day": 100}})
+        if request.url.path == "/leagues":
+            return wrapped(metadata())
+        raise AssertionError("No schedule request should be sent after the budget is exhausted")
+
+    cache = MemoryCache()
+    with client(handler) as http, pytest.raises(RequestBudgetExceeded, match="deferred until quota resets"):
+        ApiFootballProvider(settings(api_football_daily_budget=2), client=http, cache=cache).fetch()
+
+    assert cache.values["sync_status"]["status"] == "deferred"
+
+
 def test_plan_restricted_history_for_one_league_does_not_block_the_next_league():
     history_leagues = []
 

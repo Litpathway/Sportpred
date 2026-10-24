@@ -1,14 +1,15 @@
 import httpx
 import redis
 import sentry_sdk
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.ml.features import features_for
 from app.models.entities import AuditLog, Fixture, JobRun, Prediction, utcnow
+from app.providers.api_football import RequestBudgetExceeded
 from app.providers.booking import booking_provider
-from app.providers.fixtures import fixture_provider
+from app.providers.fixtures import ProviderFailure, fixture_provider
 from app.services.analytics import drift_report, settle_results
 from app.services.ingestion import sync_fixtures
 from app.services.predictions import generate_predictions, latest_prediction_ids, refilter, train_and_register
@@ -93,14 +94,23 @@ def run_job(self, name: str):
                 result = execute_job(name, db)
                 job = db.get(JobRun, job_id)
                 job.status, job.finished_at = "succeeded", utcnow()
+                db.execute(update(JobRun).where(JobRun.name == name, JobRun.status == "dead_letter",
+                    JobRun.id != job_id).values(status="superseded"))
                 db.commit()
                 return result
             except Exception as exc:
                 db.rollback()
                 job = db.get(JobRun, job_id)
+                if isinstance(exc, RequestBudgetExceeded):
+                    job.status = "deferred"
+                    job.error = str(exc)[:500]
+                    job.finished_at = utcnow()
+                    db.commit()
+                    return {"status": "deferred", "reason": job.error}
                 final = self.request.retries >= self.max_retries
                 job.status = "dead_letter" if final else "retrying"
-                job.error, job.finished_at = type(exc).__name__, utcnow()
+                job.error = (str(exc)[:500] if isinstance(exc, ProviderFailure) else type(exc).__name__)
+                job.finished_at = utcnow()
                 db.commit()
                 if final:
                     sentry_sdk.capture_exception(exc)

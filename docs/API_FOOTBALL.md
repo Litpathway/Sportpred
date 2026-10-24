@@ -8,6 +8,8 @@ Results settled after extra time or penalties use `score.fulltime` for regulatio
 
 Redis caches successful responses with their original observation timestamps and atomically limits uncached requests across worker restarts and manual retries. Defaults are 90 external requests per UTC day and eight per minute. Production initially uses a 60-minute pipeline, 60-minute fixture cache and 180-minute odds cache. These limits favor a small initial API plan; check actual subscription and coverage before raising them. Reaching a quota preserves existing records, records a warning and stops additional requests. Error text from the provider is not logged verbatim because it can echo credentials.
 
+When the SportyBet odds overlay is enabled, it is the selected odds source and the API-Football adapter skips per-fixture `/odds` requests. This avoids spending the fixture API quota on quotes that would be replaced by the overlay. If the daily guard prevents every schedule request, the job is marked deferred until the next quota window instead of retrying four times into the dead-letter queue. The administrator's job list shows the sanitized provider reason. A later successful run marks older dead letters for that same task as superseded, retaining their error details for history while clearing the active failure count.
+
 API-Football sometimes returns HTTP 200 with an `errors` body. This is treated as a failure. Authentication, subscription, pagination, quota and transport errors remain distinct from an empty fixture list. A scheduled job cannot claim a complete successful sync when every schedule request failed. Account status and sanitized import warnings appear in the administrator's Providers screen.
 
 ## Historical availability and models

@@ -239,6 +239,8 @@ class ApiFootballProvider:
                 self.warnings.append({"reason": "league_coverage_unavailable", "league_slug": self.ids[native]})
         rows = {}
         successful = 0
+        schedule_days = tuple(range(-1, self.settings.api_football_days_ahead + 1))
+        budget_deferred = 0
 
         def consume(items, observed):
             for item in items:
@@ -256,16 +258,22 @@ class ApiFootballProvider:
                 except (ValueError, KeyError, TypeError, ValidationError):
                     self.warnings.append({"reason": "invalid_or_incomplete_fixture"})
 
-        for offset in range(-1, self.settings.api_football_days_ahead + 1):
+        for offset in schedule_days:
             day = (datetime.now(UTC) + timedelta(days=offset)).date().isoformat()
             try:
                 items, observed = self._read("/fixtures", {"date": day, "timezone": "UTC"}, self.settings.api_football_fixture_cache_minutes * 60)
                 consume(items, observed)
                 successful += 1
+            except RequestBudgetExceeded as exc:
+                budget_deferred += 1
+                self.warnings.append({"reason": "schedule_unavailable", "detail": str(exc), "date": day})
             except ProviderFailure as exc:
                 self.warnings.append({"reason": "schedule_unavailable", "detail": str(exc), "date": day})
         if not successful:
-            self.cache.set("sync_status", {"status": "unavailable", "warnings": self.warnings}, 86400)
+            status = "deferred" if budget_deferred == len(schedule_days) else "unavailable"
+            self.cache.set("sync_status", {"status": status, "warnings": self.warnings}, 86400)
+            if status == "deferred":
+                raise RequestBudgetExceeded("API-Football request budget reached; fixture sync deferred until quota resets")
             raise ProviderFailure("API-Football fixture access is unavailable; check current-season access and request quota")
         # Warm one uncached league history per run; cached histories cost no API calls.
         for native, season in seasons.items():
@@ -287,17 +295,18 @@ class ApiFootballProvider:
         now = datetime.now(UTC)
         window_end = (now + timedelta(days=self.settings.api_football_days_ahead + 1)).replace(hour=0, minute=0, second=0, microsecond=0)
         candidates = sorted((r for r in rows.values() if r.status == "scheduled" and now < r.kickoff < window_end), key=lambda r: (r.kickoff, r.external_id))
-        for row in candidates:
-            try:
-                items, observed = self._read("/odds", {"fixture": int(row.external_id)}, self.settings.api_football_odds_cache_minutes * 60)
-                for item in items:
-                    self._odds(row, item, observed)
-            except RequestBudgetExceeded:
-                self.warnings.append({"reason": "request_budget_reached"})
-                break
-            except (ProviderFailure, ValueError, TypeError, KeyError) as exc:
-                self.warnings.append({"reason": "odds_unavailable", "fixture": row.external_id,
-                    "detail": str(exc) if isinstance(exc, ProviderFailure) else "Invalid odds response"})
+        if not self.settings.sportybet_odds_enabled:
+            for row in candidates:
+                try:
+                    items, observed = self._read("/odds", {"fixture": int(row.external_id)}, self.settings.api_football_odds_cache_minutes * 60)
+                    for item in items:
+                        self._odds(row, item, observed)
+                except RequestBudgetExceeded:
+                    self.warnings.append({"reason": "request_budget_reached"})
+                    break
+                except (ProviderFailure, ValueError, TypeError, KeyError) as exc:
+                    self.warnings.append({"reason": "odds_unavailable", "fixture": row.external_id,
+                        "detail": str(exc) if isinstance(exc, ProviderFailure) else "Invalid odds response"})
         fixtures = [FixtureDTO.model_validate(row.model_dump()) for row in rows.values()]
         if self.settings.sportybet_odds_enabled:
             try:
