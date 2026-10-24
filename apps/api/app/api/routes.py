@@ -141,7 +141,8 @@ def fixture_detail(fixture_id: int, db: DB):
 
 
 @router.get("/predictions")
-def predictions(db: DB, high_confidence: bool = False, latest_only: bool = True, q: str = Query(default="", max_length=100), market: str = "",
+def predictions(db: DB, high_confidence: bool = False, latest_only: bool = True, best_per_match: bool = False,
+                q: str = Query(default="", max_length=100), market: str = "",
                 outcome: str = "", competition: str = "", limit: int = Query(default=40, ge=1, le=100), offset: int = Query(default=0, ge=0)):
     query = select(Prediction).join(Fixture).where(Fixture.simulated == get_settings().demo_mode).order_by(Prediction.probability.desc(), Prediction.id)
     if latest_only:
@@ -159,6 +160,13 @@ def predictions(db: DB, high_confidence: bool = False, latest_only: bool = True,
     if q:
         from app.models.entities import Team
         query = query.where(or_(Fixture.home.has(Team.name.ilike(f"%{q}%")), Fixture.away.has(Team.name.ilike(f"%{q}%"))))
+    if best_per_match:
+        ranked = query.add_columns(func.row_number().over(
+            partition_by=Prediction.fixture_id,
+            order_by=(Prediction.probability.desc(), Prediction.id.desc()),
+        ).label("match_rank")).subquery()
+        query = select(Prediction).join(ranked, ranked.c.id == Prediction.id).where(ranked.c.match_rank == 1)
+        query = query.order_by(Prediction.probability.desc(), Prediction.id)
     total = db.scalar(select(func.count()).select_from(query.subquery()))
     return {"items": [prediction_json(p) for p in db.scalars(query.limit(limit).offset(offset))], "total": total}
 
