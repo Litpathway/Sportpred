@@ -94,7 +94,8 @@ def run_job(self, name: str):
                 result = execute_job(name, db)
                 job = db.get(JobRun, job_id)
                 job.status, job.finished_at = "succeeded", utcnow()
-                db.execute(update(JobRun).where(JobRun.name == name, JobRun.status == "dead_letter",
+                recovered_names = ("pipeline", "sync", "odds", "enrich", "settle", "predict", "filter", "slips", "publish", "monitor") if name == "pipeline" else (name,)
+                db.execute(update(JobRun).where(JobRun.name.in_(recovered_names), JobRun.status == "dead_letter",
                     JobRun.id != job_id).values(status="superseded"))
                 db.commit()
                 return result

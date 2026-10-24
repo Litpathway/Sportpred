@@ -49,6 +49,24 @@ def test_successful_run_supersedes_older_dead_letters_for_same_job(db, monkeypat
     assert other.status == "dead_letter"
 
 
+def test_successful_pipeline_supersedes_failures_from_its_stages(db, monkeypatch):
+    configure(monkeypatch, db)
+    covered = [JobRun(key=f"{name}:old-task", name=name, status="dead_letter", attempts=4, error="old provider error")
+               for name in ("pipeline", "sync", "odds", "predict")]
+    unrelated = JobRun(key="train:old-task", name="train", status="dead_letter", attempts=4, error="training error")
+    db.add_all([*covered, unrelated])
+    db.commit()
+    monkeypatch.setattr(tasks, "execute_job", lambda name, session: {"done": True})
+
+    tasks.run_job.apply(args=["pipeline"], task_id="recovered-pipeline", throw=True)
+
+    for job in covered:
+        db.refresh(job)
+        assert job.status == "superseded" and job.error == "old provider error"
+    db.refresh(unrelated)
+    assert unrelated.status == "dead_letter"
+
+
 def test_failed_job_retries_then_records_dead_letter(db, monkeypatch):
     configure(monkeypatch, db)
     def failing(name, session): raise ConnectionError("provider unavailable")
