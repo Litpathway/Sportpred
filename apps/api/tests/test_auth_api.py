@@ -84,7 +84,7 @@ def test_latest_snapshot_feed_preserves_full_historical_records(client, db, sele
                       probability=.88,raw_probability=.9,quality=.85,odds=1.3,odds_at=utcnow(),eligible=True,
                       features={},explanation="New snapshot",created_at=utcnow())
     db.add(newest);db.commit()
-    assert client.get("/api/predictions").json()["total"]==2
+    assert client.get("/api/predictions?latest_only=false").json()["total"]==2
     latest=client.get("/api/predictions?latest_only=true").json()
     assert latest["total"]==1 and latest["items"][0]["id"]==newest.id
     assert len(client.get(f"/api/fixtures/{selection.fixture_id}").json()["predictions"])==1
